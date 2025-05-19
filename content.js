@@ -48,24 +48,20 @@ const sentimentConfig = {
   useAI: false,
   // AI 모델 엔드포인트 (나중에 설정)
   aiEndpoint: 'https://your-ai-endpoint.com/analyze',
-  // 기본 감정 분석용 단어 목록
-  positiveWords: ['좋아요', '최고', '감사', '좋은', '재미', '훌륭', '사랑', '응원', '감동', '행복'],
-  negativeWords: ['싫어요', '최악', '실망', '나쁜', '지루', '별로', '불만', '화나', '짜증', '실망']
+  // 부적절한 단어 목록
+  inappropriateWords: ['욕설', '비방', '혐오', '차별', '성적', '폭력', '스팸', '광고', '도박', '사기']
 };
 
 // 기본 감정 분석 함수
 function analyzeSentimentBasic(comment) {
-  let score = 0;
-  sentimentConfig.positiveWords.forEach(word => {
-    if (comment.includes(word)) score++;
-  });
-  sentimentConfig.negativeWords.forEach(word => {
-    if (comment.includes(word)) score--;
+  let isInappropriate = false;
+  sentimentConfig.inappropriateWords.forEach(word => {
+    if (comment.includes(word)) {
+      isInappropriate = true;
+    }
   });
   
-  if (score > 0) return 'positive';
-  if (score < 0) return 'negative';
-  return 'neutral';
+  return isInappropriate ? 'inappropriate' : 'normal';
 }
 
 // AI 기반 감정 분석 함수
@@ -84,7 +80,7 @@ async function analyzeSentimentAI(comment) {
     }
 
     const result = await response.json();
-    return result.sentiment; // 'positive', 'negative', 'neutral' 중 하나 반환
+    return result.sentiment; // 'normal', 'inappropriate' 중 하나 반환
   } catch (error) {
     console.error('AI 감정 분석 중 오류:', error);
     // AI 분석 실패 시 기본 감정 분석으로 폴백
@@ -167,9 +163,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const comments = await collectComments(videoId);
         const analysis = {
           totalComments: comments.length,
-          positiveComments: 0,
-          negativeComments: 0,
-          neutralComments: 0,
+          normalComments: 0,
+          inappropriateComments: 0,
           comments: []
         };
         

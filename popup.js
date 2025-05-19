@@ -82,18 +82,17 @@ document.addEventListener('DOMContentLoaded', function() {
   // 감정 텍스트 변환
   function getSentimentText(sentiment) {
     switch(sentiment) {
-      case 'positive': return '긍정적';
-      case 'negative': return '부정적';
-      default: return '중립적';
+      case 'normal': return '일반';
+      case 'inappropriate': return '부적절';
+      default: return '일반';
     }
   }
 
   // 분석 결과 표시
   function displayResults(analysis) {
     document.getElementById('totalComments').textContent = analysis.totalComments;
-    document.getElementById('positiveComments').textContent = analysis.positiveComments;
-    document.getElementById('negativeComments').textContent = analysis.negativeComments;
-    document.getElementById('neutralComments').textContent = analysis.neutralComments;
+    document.getElementById('normalComments').textContent = analysis.normalComments;
+    document.getElementById('inappropriateComments').textContent = analysis.inappropriateComments;
     
     resultsDiv.style.display = 'block';
   }
