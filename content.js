@@ -44,13 +44,11 @@ async function collectComments(videoId) {
 
 // 감정 분석 설정
 const sentimentConfig = {
-  // 현재는 기본 감정 분석 사용
-  useAI: false,
-  // AI 모델 엔드포인트 (나중에 설정)
-  aiEndpoint: 'https://your-ai-endpoint.com/analyze',
-  // 부적절한 단어 목록
-  inappropriateWords: ['욕설', '비방', '혐오', '차별', '성적', '폭력', '스팸', '광고', '도박', '사기']
+  useAI: true,
+  aiEndpoint: 'https://spam-ai-model-514551150962.asia-northeast3.run.app/analyze',
+  inappropriateWords: [] // AI 기반으로 분석하므로 목록 생략 가능
 };
+
 
 // 기본 감정 분석 함수
 function analyzeSentimentBasic(comment) {

@@ -1,12 +1,22 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib
 
-# 모델 및 벡터라이저 로드
+app = FastAPI()
+
+# CORS 허용 설정
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 배포 시 여기를 제한 가능
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 모델 로드
 model = joblib.load("svc_model.joblib")
 vectorizer = joblib.load("vectorizer.joblib")
-
-app = FastAPI()
 
 # 입력 형식
 class Comment(BaseModel):
