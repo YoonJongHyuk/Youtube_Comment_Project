@@ -4,12 +4,14 @@
   "version": "1.0",
   "description": "YouTube 댓글을 분석하고 감정을 분류합니다.",
   "permissions": [
+    "scripting",
     "activeTab",
     "storage"
   ],
   "host_permissions": [
     "https://www.youtube.com/*",
-    "https://www.googleapis.com/*"
+    "https://www.googleapis.com/*",
+    "https://comment-api-51455110962.asia-northeast3.run.app/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -19,7 +21,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["*://*.youtube.com/*"],
       "js": ["content.js"]
     }
   ],

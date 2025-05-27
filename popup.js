@@ -1,156 +1,180 @@
-document.addEventListener('DOMContentLoaded', function() {
-  const videoUrlInput = document.getElementById('videoUrl');
-  const analyzeBtn = document.getElementById('analyzeBtn');
-  const loadingDiv = document.getElementById('loading');
-  const errorDiv = document.getElementById('error');
-  const resultsDiv = document.getElementById('results');
-  const commentList = document.getElementById('commentList');
-  
-  let comments = []; // 댓글 데이터 저장
+const analyzeBtn = document.getElementById('analyzeBtn');
+const showBlockedBtn = document.getElementById('showBlockedBtn');
+const videoUrlInput = document.getElementById('videoUrl');
+const resultContainer = document.getElementById('results');
+const commentList = document.getElementById('commentList');
+const blockedList = document.getElementById('blockedList');
+const loadingDiv = document.getElementById('loading');
 
-  // 드래그 앤 드롭 기능 구현
-  function setupDragAndDrop() {
-    const items = commentList.getElementsByClassName('comment-item');
-    let draggedItem = null;
+const API_BASE = "https://spam-ai-model-514551150962.asia-northeast3.run.app";
 
-    Array.from(items).forEach(item => {
-      item.addEventListener('dragstart', function(e) {
-        draggedItem = this;
-        this.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-      });
-
-      item.addEventListener('dragend', function() {
-        this.classList.remove('dragging');
-        draggedItem = null;
-      });
-
-      item.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-      });
-
-      item.addEventListener('dragenter', function(e) {
-        e.preventDefault();
-        this.classList.add('dragover');
-      });
-
-      item.addEventListener('dragleave', function() {
-        this.classList.remove('dragover');
-      });
-
-      item.addEventListener('drop', function(e) {
-        e.preventDefault();
-        this.classList.remove('dragover');
-        
-        if (draggedItem !== this) {
-          const allItems = [...commentList.getElementsByClassName('comment-item')];
-          const draggedIndex = allItems.indexOf(draggedItem);
-          const droppedIndex = allItems.indexOf(this);
-
-          if (draggedIndex < droppedIndex) {
-            this.parentNode.insertBefore(draggedItem, this.nextSibling);
-          } else {
-            this.parentNode.insertBefore(draggedItem, this);
-          }
-        }
-      });
-    });
-  }
-
-  // 댓글 목록 표시
-  function displayComments(comments) {
-    commentList.innerHTML = '';
-    comments.forEach(comment => {
-      const item = document.createElement('div');
-      item.className = `comment-item ${comment.sentiment}`;
-      item.draggable = true;
-      
-      item.innerHTML = `
-        <div class="comment-text">${comment.text}</div>
-        <div class="comment-sentiment">
-          감정: ${getSentimentText(comment.sentiment)}
-        </div>
-      `;
-      
-      commentList.appendChild(item);
-    });
-    
-    setupDragAndDrop();
-  }
-
-  // 감정 텍스트 변환
-  function getSentimentText(sentiment) {
-    switch(sentiment) {
-      case 'normal': return '일반';
-      case 'inappropriate': return '부적절';
-      default: return '일반';
+// ✅ 서버에서 차단된 작성자 목록 조회
+async function getBlockedAuthorsFromServer() {
+  try {
+    const response = await fetch(`${API_BASE}/blocked_authors`);
+    if (!response.ok) {
+      console.warn("[🚫 API] blocked_authors 상태코드:", response.status);
+      return [];
     }
+    return await response.json();
+  } catch (error) {
+    console.error("[❌ API] blocked_authors 요청 실패:", error);
+    return [];
   }
+}
 
-  // 분석 결과 표시
-  function displayResults(analysis) {
-    document.getElementById('totalComments').textContent = analysis.totalComments;
-    document.getElementById('normalComments').textContent = analysis.normalComments;
-    document.getElementById('inappropriateComments').textContent = analysis.inappropriateComments;
-    
-    resultsDiv.style.display = 'block';
-  }
+// ✅ 사용자 ID 가져오기 (최초 생성 시 랜덤)
+function getUserId() {
+  return new Promise(resolve => {
+    chrome.storage.sync.get(['user_id'], result => {
+      let uid = result.user_id;
+      if (!uid) {
+        uid = 'user_' + Math.random().toString(36).substring(2, 10);
+        chrome.storage.sync.set({ user_id: uid });
+      }
+      resolve(uid);
+    });
+  });
+}
 
-  // 에러 메시지 표시
-  function showError(message) {
-    errorDiv.textContent = message;
-    errorDiv.style.display = 'block';
-    loadingDiv.style.display = 'none';
-  }
+// ✅ 감정 텍스트 변환
+function getSentimentText(sentiment) {
+  return sentiment === 'inappropriate' ? '부적절' : '정상';
+}
 
-  // 분석 버튼 클릭 이벤트
-  analyzeBtn.addEventListener('click', async function() {
-    const videoUrl = videoUrlInput.value.trim();
-    
-    if (!videoUrl) {
-      showError('YouTube URL을 입력해주세요.');
+// ✅ 댓글 목록 렌더링
+function displayComments(comments) {
+  commentList.innerHTML = '';
+  comments.forEach(comment => {
+    const item = document.createElement('div');
+    item.className = `comment-item ${comment.sentiment}`;
+    item.innerHTML = `
+      <div class="comment-text">${comment.text}</div>
+      <div class="comment-author">작성자: ${comment.author}</div>
+      <div class="comment-sentiment">감정: ${getSentimentText(comment.sentiment)}</div>
+    `;
+
+    if (comment.sentiment === 'inappropriate') {
+      const blockBtn = document.createElement('button');
+      blockBtn.textContent = '차단';
+      blockBtn.addEventListener('click', async () => {
+        const userId = await getUserId();
+        await fetch(`${API_BASE}/block`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId, author: comment.author })
+        });
+        blockBtn.disabled = true;
+        blockBtn.textContent = '차단됨';
+      });
+      item.appendChild(blockBtn);
+    }
+
+    commentList.appendChild(item);
+  });
+}
+
+// ✅ 분석 결과 출력
+function displayAnalysis(analysis) {
+  resultContainer.style.display = 'block';
+  document.getElementById('totalComments').textContent = analysis.totalComments;
+  document.getElementById('normalComments').textContent = analysis.normalComments;
+  document.getElementById('inappropriateComments').textContent = analysis.inappropriateComments;
+  displayComments(analysis.comments);
+}
+
+// ✅ 차단된 닉네임 목록 표시
+async function loadBlockedAuthorsUI() {
+  blockedList.innerHTML = '🔃 불러오는 중...';
+
+  try {
+    const authors = await getBlockedAuthorsFromServer();
+
+    if (!authors || authors.length === 0) {
+      blockedList.innerHTML = '<p>차단된 작성자가 없습니다.</p>';
       return;
     }
 
-    loadingDiv.style.display = 'block';
-    errorDiv.style.display = 'none';
-    resultsDiv.style.display = 'none';
+    blockedList.innerHTML = '';
+    authors.forEach(author => {
+      const row = document.createElement('div');
+      row.className = 'blocked-author-row';
 
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      
-      chrome.tabs.sendMessage(tab.id, { 
-        action: 'analyzeComments',
-        url: videoUrl
-      }, response => {
-        loadingDiv.style.display = 'none';
-        
-        if (chrome.runtime.lastError) {
-          showError('메시지 전송 중 오류가 발생했습니다: ' + chrome.runtime.lastError.message);
-          return;
-        }
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = author;
 
-        if (!response) {
-          showError('응답을 받지 못했습니다.');
-          return;
-        }
+      const unblockBtn = document.createElement('button');
+      unblockBtn.textContent = '🔓 차단 해제';
+      unblockBtn.addEventListener('click', async () => {
+        const confirmed = confirm(`${author} 님의 차단을 해제할까요?`);
+        if (!confirmed) return;
 
-        if (response.error) {
-          showError(response.error);
-          return;
-        }
+        await fetch(`${API_BASE}/unblock`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: 'anonymous', author })
+        });
 
-        if (response.success) {
-          displayResults(response);
-          displayComments(response.comments);
-        } else {
-          showError('분석 중 오류가 발생했습니다.');
-        }
+        // 댓글 새로고침 트리거
+        chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+          chrome.tabs.sendMessage(tabs[0].id, { action: "refreshComments" });
+        });
+
+        loadBlockedAuthorsUI();
       });
-    } catch (error) {
+
+      row.appendChild(nameSpan);
+      row.appendChild(unblockBtn);
+      blockedList.appendChild(row);
+    });
+  } catch (err) {
+    console.error("차단된 작성자 목록 불러오기 실패:", err);
+    blockedList.innerHTML = '<p>차단된 작성자 정보를 불러오지 못했습니다.</p>';
+  }
+}
+
+// ✅ 분석 버튼 클릭 이벤트
+analyzeBtn.addEventListener('click', () => {
+  const url = videoUrlInput.value.trim();
+  if (!url) {
+    alert('YouTube 비디오 URL을 입력하세요.');
+    return;
+  }
+
+  commentList.style.display = 'block';
+  blockedList.style.display = 'none';
+
+  loadingDiv.style.display = 'block';
+  resultContainer.style.display = 'none';
+  commentList.innerHTML = '';
+
+  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+    const tab = tabs[0];
+    chrome.tabs.sendMessage(tab.id, { action: "analyzeComments", url }, response => {
       loadingDiv.style.display = 'none';
-      showError('분석 중 오류가 발생했습니다: ' + error.message);
-    }
+
+      if (!response || !response.success) {
+        resultContainer.innerHTML = `<p style="color:red;">분석 실패: ${response?.error || '알 수 없는 오류'}</p>`;
+        return;
+      }
+
+      displayAnalysis(response);
+    });
   });
-}); 
+});
+
+// ✅ 차단된 닉네임 보기 버튼 클릭 이벤트
+showBlockedBtn.addEventListener('click', () => {
+  blockedList.style.display = 'block';
+  commentList.style.display = 'none';
+  loadBlockedAuthorsUI();
+});
+
+// ✅ content.js → blocked authors 요청 응답 (서버 사용)
+chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+  if (message.action === 'getBlockedAuthors') {
+    const authors = await getBlockedAuthorsFromServer();
+    sendResponse(authors);
+    return true;
+  }
+});

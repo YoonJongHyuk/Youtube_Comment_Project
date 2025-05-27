@@ -1,158 +1,176 @@
-// YouTube Data API를 사용하여 댓글 수집
-async function collectComments(videoId) {
+// Cloud Run API 주소
+const API_BASE = "https://spam-ai-model-514551150962.asia-northeast3.run.app";
+const BLOCKED_AUTHORS_KEY = 'blocked_authors';
+
+// 기본 필터 키워드
+const sentimentConfig = {
+  useAI: true,
+  inappropriateWords: ['욕설', '비방', '혐오', '차별', '성적', '폭력', '스팸', '광고', '도박', '사기']
+};
+
+// ✅ 서버에서 차단된 작성자 목록 가져오기
+async function getBlockedAuthorsFromServer() {
   try {
-    const apiKey = 'AIzaSyC_iw9IS7qmhChzKTqcz37JcmCaAO1Rw2o';
-    let allComments = [];
-    let nextPageToken = null;
-    let totalComments = 0;
-
-    do {
-      const response = await fetch(
-        `https://www.googleapis.com/youtube/v3/commentThreads?` +
-        `part=snippet&` +
-        `videoId=${videoId}&` +
-        `maxResults=100&` +
-        `pageToken=${nextPageToken || ''}&` +
-        `key=${apiKey}`
-      );
-
-      if (!response.ok) {
-        throw new Error('댓글을 가져오는데 실패했습니다.');
-      }
-
-      const data = await response.json();
-      const comments = data.items.map(item => item.snippet.topLevelComment.snippet.textDisplay);
-      allComments = allComments.concat(comments);
-      
-      nextPageToken = data.nextPageToken;
-      totalComments = data.pageInfo.totalResults;
-
-      // API 할당량 제한을 고려하여 잠시 대기
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    } while (nextPageToken && allComments.length < totalComments);
-
-    if (allComments.length === 0) {
-      throw new Error('댓글을 찾을 수 없습니다. 댓글이 비활성화되었거나 로드되지 않았을 수 있습니다.');
+    const response = await fetch(`${API_BASE}/blocked_authors`);
+    if (!response.ok) {
+      console.warn("[🚫 blocked_authors] 상태코드:", response.status);
+      return [];
     }
-
-    return allComments;
+    return await response.json();
   } catch (error) {
-    console.error('댓글 수집 중 오류:', error);
-    throw error;
+    console.error("[❌ blocked_authors] 요청 실패:", error);
+    return [];
   }
 }
 
-// 감정 분석 설정
-const sentimentConfig = {
-  useAI: true,
-  aiEndpoint: 'https://spam-ai-model-514551150962.asia-northeast3.run.app/analyze',
-  inappropriateWords: [] // AI 기반으로 분석하므로 목록 생략 가능
-};
-
-
-// 기본 감정 분석 함수
-function analyzeSentimentBasic(comment) {
-  let isInappropriate = false;
-  sentimentConfig.inappropriateWords.forEach(word => {
-    if (comment.includes(word)) {
-      isInappropriate = true;
-    }
+// ✅ 차단된 작성자 목록 기준 댓글 숨기기
+async function observeAndFilterComments() {
+  const observer = new MutationObserver(async () => {
+    const blocked = await getBlockedAuthorsFromServer();
+    hideBlockedComments(blocked);
   });
-  
-  return isInappropriate ? 'inappropriate' : 'normal';
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+
+  const initial = await getBlockedAuthorsFromServer();
+  hideBlockedComments(initial);
 }
 
-// AI 기반 감정 분석 함수
-async function analyzeSentimentAI(comment) {
+// ✅ refresh 요청 처리
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'refreshComments') {
+    getBlockedAuthorsFromServer().then(hideBlockedComments);
+  }
+});
+
+// 차단 목록 저장 (로컬 백업용)
+async function saveBlockedAuthorsToStorage(authors) {
   try {
-    const response = await fetch(sentimentConfig.aiEndpoint, {
+    await chrome.storage.sync.set({ [BLOCKED_AUTHORS_KEY]: authors });
+    console.log("[✅ storage] 차단 목록 저장 완료");
+  } catch (error) {
+    console.error("[❌ storage] 쓰기 실패:", error);
+  }
+}
+
+// 댓글 작성자 추출
+function getCommentAuthorFromElement(el) {
+  const authorElement = el.querySelector('#author-text');
+  return authorElement ? authorElement.textContent.trim() : null;
+}
+
+// 댓글 DOM에서 차단 적용
+function hideBlockedComments(blockedAuthors) {
+  const comments = document.querySelectorAll("ytd-comment-thread-renderer");
+  comments.forEach(el => {
+    const author = getCommentAuthorFromElement(el);
+    if (author && blockedAuthors.includes(author)) {
+      el.style.display = "none";
+      console.log(`🙈 숨김: ${author}`);
+    } else {
+      el.style.display = "";
+    }
+  });
+}
+
+// 기본 감정 분석
+function analyzeSentimentBasic(text) {
+  return sentimentConfig.inappropriateWords.some(word => text.includes(word))
+    ? 'inappropriate' : 'normal';
+}
+
+// AI 감정 분석
+async function analyzeSentimentAI(comment) {
+  const { text, author } = comment;
+  if (!author || typeof author !== "string" || author.trim() === "") {
+    console.warn("❌ 유효하지 않은 author. 기본 분석으로 대체:", author);
+    return analyzeSentimentBasic(text);
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/analyze`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ text: comment })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, author })
     });
 
     if (!response.ok) {
-      throw new Error('AI 분석 실패');
+      console.warn(`[🚫 analyze] 상태코드: ${response.status}`);
+      return analyzeSentimentBasic(text);
     }
 
     const result = await response.json();
-    return result.sentiment; // 'normal', 'inappropriate' 중 하나 반환
+    return result.sentiment;
   } catch (error) {
-    console.error('AI 감정 분석 중 오류:', error);
-    // AI 분석 실패 시 기본 감정 분석으로 폴백
-    return analyzeSentimentBasic(comment);
+    console.error("[❌ analyze] 요청 실패:", error);
+    return analyzeSentimentBasic(text);
   }
 }
 
-// 통합 감정 분석 함수
+// 분석 선택자
 async function analyzeSentiment(comment) {
-  if (sentimentConfig.useAI) {
-    return await analyzeSentimentAI(comment);
-  }
-  return analyzeSentimentBasic(comment);
+  return sentimentConfig.useAI
+    ? await analyzeSentimentAI(comment)
+    : analyzeSentimentBasic(comment.text);
 }
 
-// 비디오 ID 추출 함수 개선
+// YouTube API로 댓글 수집
+async function collectComments(videoId) {
+  const apiKey = 'AIzaSyC_iw9IS7qmhChzKTqcz37JcmCaAO1Rw2o';
+  let allComments = [];
+  let nextPageToken = null;
+
+  do {
+    const response = await fetch(
+      `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&maxResults=100&pageToken=${nextPageToken || ''}&key=${apiKey}`
+    );
+
+    if (!response.ok) throw new Error('댓글 수집 실패');
+
+    const data = await response.json();
+    const comments = data.items.map(item => ({
+      text: item.snippet.topLevelComment.snippet.textDisplay,
+      author: item.snippet.topLevelComment.snippet.authorDisplayName,
+      id: item.snippet.topLevelComment.id
+    }));
+
+    allComments = allComments.concat(comments);
+    nextPageToken = data.nextPageToken;
+    await new Promise(res => setTimeout(res, 1000));
+  } while (nextPageToken);
+
+  return allComments;
+}
+
+// 유튜브 URL에서 videoId 추출
 function getVideoId(url) {
   try {
-    // URL 객체 생성
     const urlObj = new URL(url);
-    
-    // 1. 일반적인 YouTube URL 패턴 (youtube.com/watch?v=VIDEO_ID)
-    if (urlObj.hostname === 'www.youtube.com' || urlObj.hostname === 'youtube.com') {
-      const searchParams = new URLSearchParams(urlObj.search);
-      const videoId = searchParams.get('v');
-      if (videoId && videoId.length === 11) {
-        return videoId;
-      }
+    if (urlObj.hostname.includes('youtube.com')) {
+      return new URLSearchParams(urlObj.search).get('v');
     }
-    
-    // 2. 단축 URL 패턴 (youtu.be/VIDEO_ID)
-    if (urlObj.hostname === 'youtu.be') {
-      const videoId = urlObj.pathname.slice(1); // 첫 번째 '/' 제거
-      if (videoId && videoId.length === 11) {
-        return videoId;
-      }
+    if (urlObj.hostname === 'm.youtube.com') {
+      return urlObj.pathname.slice(1);
     }
-    
-    // 3. 임베드 URL 패턴 (youtube.com/embed/VIDEO_ID)
     if (urlObj.pathname.startsWith('/embed/')) {
-      const videoId = urlObj.pathname.split('/')[2];
-      if (videoId && videoId.length === 11) {
-        return videoId;
-      }
+      return urlObj.pathname.split('/')[2];
     }
-
-    // 4. URL에서 직접 추출 시도
-    const patterns = [
-      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-      /(?:youtube\.com\/v\/|youtube\.com\/watch\?.*&v=)([^&\n?#]+)/,
-      /(?:youtube\.com\/watch\?.*v=)([^&\n?#]+)/
-    ];
-
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match && match[1] && match[1].length === 11) {
-        return match[1];
-      }
-    }
-
     return null;
-  } catch (error) {
-    console.error('비디오 ID 추출 중 오류:', error);
+  } catch (e) {
+    console.error("비디오 ID 추출 실패:", e);
     return null;
   }
 }
 
-// 메시지 리스너
+// 📦 popup에서 분석 요청 처리
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'analyzeComments') {
     const videoId = getVideoId(request.url || window.location.href);
-    
     if (!videoId) {
-      sendResponse({ success: false, error: '올바른 YouTube URL이 아닙니다.' });
+      sendResponse({ success: false, error: '유효하지 않은 YouTube URL입니다.' });
       return true;
     }
 
@@ -165,24 +183,53 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           inappropriateComments: 0,
           comments: []
         };
-        
-        // 비동기 감정 분석을 위해 Promise.all 사용
+
+        const userId = "user_" + Math.random().toString(36).substring(2, 10);
+        let currentBlockedAuthors = await getBlockedAuthorsFromServer();
+
         const sentiments = await Promise.all(
           comments.map(async comment => {
             const sentiment = await analyzeSentiment(comment);
             analysis[`${sentiment}Comments`]++;
-            return { text: comment, sentiment };
+
+            if (sentiment === 'inappropriate') {
+              await fetch(`${API_BASE}/block`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: userId, author: comment.author })
+              });
+
+              if (!currentBlockedAuthors.includes(comment.author)) {
+                currentBlockedAuthors.push(comment.author);
+              }
+            }
+
+            return { ...comment, sentiment };
           })
         );
-        
+
+        await saveBlockedAuthorsToStorage(currentBlockedAuthors); // 백업용 저장
         analysis.comments = sentiments;
         sendResponse({ success: true, ...analysis });
       } catch (error) {
-        console.error('댓글 분석 중 오류:', error);
+        console.error('분석 중 오류:', error);
         sendResponse({ success: false, error: error.message });
       }
     })();
 
-    return true; // 비동기 응답을 위해 true 반환
+    return true;
   }
-}); 
+});
+
+// 유튜브 댓글 영역에서 실행
+if (window.location.hostname.includes("youtube.com") &&
+    window.location.pathname.startsWith("/watch")) {
+  observeAndFilterComments();
+}
+
+// SPA (페이지 전환) 감지 시 재실행
+window.addEventListener('yt-navigate-finish', () => {
+  if (window.location.pathname.startsWith('/watch')) {
+    observeAndFilterComments();
+  }
+});

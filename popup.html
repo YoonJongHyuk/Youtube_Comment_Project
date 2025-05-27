@@ -107,6 +107,17 @@
       opacity: 0.5;
       background-color: #f8f9fa;
     }
+    #blockedAuthorsContainer {
+      border-top: 1px solid #ddd;
+      padding-top: 10px;
+    }
+    .blocked-author-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+
   </style>
 </head>
 <body>
@@ -114,6 +125,7 @@
     <div class="input-group">
       <input type="text" id="videoUrl" placeholder="YouTube URL을 입력하세요">
       <button id="analyzeBtn">분석</button>
+      <button id="showBlockedBtn">🔍 차단된 닉네임 보기</button>
     </div>
     
     <div id="loading" class="loading"></div>
@@ -135,7 +147,16 @@
         </div>
       </div>
       
-      <div id="commentList" class="comment-list"></div>
+      <!-- 댓글 분석 결과 목록 -->
+      <div id="commentList"></div>
+
+      <!-- 차단된 닉네임 목록 -->
+      <div id="blockedAuthorsContainer" style="margin-top: 20px;">
+        <h3>🚫 차단된 작성자 목록</h3>
+        <div id="blockedList"></div>
+      </div>
+
+
     </div>
   </div>
   <script src="popup.js"></script>
