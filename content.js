@@ -173,7 +173,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ success: false, error: '유효하지 않은 YouTube URL입니다.' });
       return true;
     }
-
+  
     (async () => {
       try {
         const comments = await collectComments(videoId);
@@ -183,32 +183,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           inappropriateComments: 0,
           comments: []
         };
-
-        const userId = "user_" + Math.random().toString(36).substring(2, 10);
-        let currentBlockedAuthors = await getBlockedAuthorsFromServer();
-
+  
         const sentiments = await Promise.all(
           comments.map(async comment => {
             const sentiment = await analyzeSentiment(comment);
             analysis[`${sentiment}Comments`]++;
-
-            if (sentiment === 'inappropriate') {
-              await fetch(`${API_BASE}/block`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ user_id: userId, author: comment.author })
-              });
-
-              if (!currentBlockedAuthors.includes(comment.author)) {
-                currentBlockedAuthors.push(comment.author);
-              }
-            }
-
             return { ...comment, sentiment };
           })
         );
-
-        await saveBlockedAuthorsToStorage(currentBlockedAuthors); // 백업용 저장
+  
         analysis.comments = sentiments;
         sendResponse({ success: true, ...analysis });
       } catch (error) {
@@ -216,9 +199,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: false, error: error.message });
       }
     })();
-
+  
     return true;
   }
+  
 });
 
 // 유튜브 댓글 영역에서 실행

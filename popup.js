@@ -5,6 +5,7 @@ const resultContainer = document.getElementById('results');
 const commentList = document.getElementById('commentList');
 const blockedList = document.getElementById('blockedList');
 const loadingDiv = document.getElementById('loading');
+const commendDiv = document.getElementById('commend');
 
 const API_BASE = "https://spam-ai-model-514551150962.asia-northeast3.run.app";
 
@@ -43,8 +44,12 @@ function getSentimentText(sentiment) {
 }
 
 // ✅ 댓글 목록 렌더링
-function displayComments(comments) {
+async function displayComments(comments) {
   commentList.innerHTML = '';
+
+  // ✅ 차단된 작성자 목록 먼저 가져오기
+  const blockedAuthors = await getBlockedAuthorsFromServer();
+
   comments.forEach(comment => {
     const item = document.createElement('div');
     item.className = `comment-item ${comment.sentiment}`;
@@ -56,23 +61,33 @@ function displayComments(comments) {
 
     if (comment.sentiment === 'inappropriate') {
       const blockBtn = document.createElement('button');
-      blockBtn.textContent = '차단';
-      blockBtn.addEventListener('click', async () => {
-        const userId = await getUserId();
-        await fetch(`${API_BASE}/block`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userId, author: comment.author })
-        });
-        blockBtn.disabled = true;
+
+      const isBlocked = blockedAuthors.includes(comment.author);
+
+      if (isBlocked) {
         blockBtn.textContent = '차단됨';
-      });
+        blockBtn.disabled = true;
+      } else {
+        blockBtn.textContent = '차단';
+        blockBtn.addEventListener('click', async () => {
+          const userId = await getUserId();
+          await fetch(`${API_BASE}/block`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, author: comment.author })
+          });
+          blockBtn.disabled = true;
+          blockBtn.textContent = '차단됨';
+        });
+      }
+
       item.appendChild(blockBtn);
     }
 
     commentList.appendChild(item);
   });
 }
+
 
 // ✅ 분석 결과 출력
 function displayAnalysis(analysis) {
@@ -133,6 +148,19 @@ async function loadBlockedAuthorsUI() {
   }
 }
 
+// ✅ 팝업 열릴 때 현재 탭이 YouTube 동영상 페이지라면 자동 입력
+document.addEventListener('DOMContentLoaded', () => {
+  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+    const tab = tabs[0];
+    const url = tab.url;
+
+    if (url.startsWith('https://www.youtube.com/watch')) {
+      videoUrlInput.value = url;
+    }
+  });
+});
+
+
 // ✅ 분석 버튼 클릭 이벤트
 analyzeBtn.addEventListener('click', () => {
   const url = videoUrlInput.value.trim();
@@ -145,6 +173,7 @@ analyzeBtn.addEventListener('click', () => {
   blockedList.style.display = 'none';
 
   loadingDiv.style.display = 'block';
+  commendDiv.style.display = 'block';
   resultContainer.style.display = 'none';
   commentList.innerHTML = '';
 
@@ -166,7 +195,9 @@ analyzeBtn.addEventListener('click', () => {
 // ✅ 차단된 닉네임 보기 버튼 클릭 이벤트
 showBlockedBtn.addEventListener('click', () => {
   blockedList.style.display = 'block';
+  resultContainer.style.display = 'block';
   commentList.style.display = 'none';
+  commendDiv.style.display = 'none';
   loadBlockedAuthorsUI();
 });
 
