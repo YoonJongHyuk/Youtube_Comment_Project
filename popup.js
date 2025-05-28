@@ -82,9 +82,9 @@ async function displayComments(comments) {
       }
 
       item.appendChild(blockBtn);
+      commentList.appendChild(item);
     }
 
-    commentList.appendChild(item);
   });
 }
 
