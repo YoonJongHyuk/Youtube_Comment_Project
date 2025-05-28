@@ -154,11 +154,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const tab = tabs[0];
     const url = tab.url;
 
-    if (url.startsWith('https://www.youtube.com/watch')) {
+    if (
+      url.startsWith('https://www.youtube.com/watch') ||
+      url.startsWith('https://www.youtube.com/shorts')
+    ) {
       videoUrlInput.value = url;
     }
   });
 });
+
 
 
 // ✅ 분석 버튼 클릭 이벤트

@@ -150,13 +150,19 @@ function getVideoId(url) {
   try {
     const urlObj = new URL(url);
     if (urlObj.hostname.includes('youtube.com')) {
-      return new URLSearchParams(urlObj.search).get('v');
-    }
-    if (urlObj.hostname === 'm.youtube.com') {
-      return urlObj.pathname.slice(1);
-    }
-    if (urlObj.pathname.startsWith('/embed/')) {
-      return urlObj.pathname.split('/')[2];
+      // 일반 watch 주소
+      const id = new URLSearchParams(urlObj.search).get('v');
+      if (id) return id;
+
+      // ✅ shorts 주소 처리
+      if (urlObj.pathname.startsWith('/shorts/')) {
+        return urlObj.pathname.split('/')[2];  // /shorts/비디오ID
+      }
+
+      // 임베드 주소 처리
+      if (urlObj.pathname.startsWith('/embed/')) {
+        return urlObj.pathname.split('/')[2];
+      }
     }
     return null;
   } catch (e) {
@@ -164,6 +170,7 @@ function getVideoId(url) {
     return null;
   }
 }
+
 
 // 📦 popup에서 분석 요청 처리
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -206,14 +213,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // 유튜브 댓글 영역에서 실행
-if (window.location.hostname.includes("youtube.com") &&
-    window.location.pathname.startsWith("/watch")) {
+if (
+  window.location.hostname.includes("youtube.com") &&
+  (window.location.pathname.startsWith("/watch") || window.location.pathname.startsWith("/shorts"))
+) {
   observeAndFilterComments();
 }
 
-// SPA (페이지 전환) 감지 시 재실행
+// SPA 페이지 전환 시 재실행
 window.addEventListener('yt-navigate-finish', () => {
-  if (window.location.pathname.startsWith('/watch')) {
+  if (
+    window.location.pathname.startsWith('/watch') ||
+    window.location.pathname.startsWith('/shorts')
+  ) {
     observeAndFilterComments();
   }
 });
+
