@@ -11,7 +11,7 @@
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://www.googleapis.com/*",
-    "https://comment-api-51455110962.asia-northeast3.run.app/*"
+    "https://comment-api-514551150962.asia-northeast3.run.app/*"
   ],
   "action": {
     "default_popup": "popup.html",

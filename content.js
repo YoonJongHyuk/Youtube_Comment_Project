@@ -1,5 +1,5 @@
 // Cloud Run API 주소
-const API_BASE = "https://spam-ai-model-514551150962.asia-northeast3.run.app";
+const API_BASE = "https://comment-api-514551150962.asia-northeast3.run.app";
 const BLOCKED_AUTHORS_KEY = 'blocked_authors';
 
 // 기본 필터 키워드
