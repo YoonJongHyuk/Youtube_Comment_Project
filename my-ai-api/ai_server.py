@@ -2,9 +2,18 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from openai import OpenAI
+from dotenv import load_dotenv
+import os
 import joblib
 
+load_dotenv()
+
 app = FastAPI()
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
 
 # CORS 허용 설정
 app.add_middleware(
@@ -16,8 +25,8 @@ app.add_middleware(
 )
 
 # 모델 로드
-model = joblib.load("svc_model.joblib")
-vectorizer = joblib.load("vectorizer.joblib")
+#model = joblib.load("svc_model.joblib")
+#vectorizer = joblib.load("vectorizer.joblib")
 
 # 메모리에 저장하는 차단 작성자 리스트
 blocked_authors = set()
@@ -32,18 +41,21 @@ class BlockRequest(BaseModel):
     user_id: str
     author: str
 
+class CommentRequest(BaseModel):
+    comment: str
+
 
 # ✅ 감정 분석 API
-@app.post("/analyze")
-def analyze(comment: Comment):
-    X = vectorizer.transform([comment.text])
-    pred = model.predict(X)[0]
-    sentiment = "inappropriate" if pred == 1 else "normal"
+# @app.post("/analyze")
+# def analyze(comment: Comment):
+#     X = vectorizer.transform([comment.text])
+#     pred = model.predict(X)[0]
+#     sentiment = "inappropriate" if pred == 1 else "normal"
 
-    # if sentiment == "inappropriate":
-    #     blocked_authors.add(comment.author)
+#     # if sentiment == "inappropriate":
+#     #     blocked_authors.add(comment.author)
 
-    return {"sentiment": sentiment}
+#     return {"sentiment": sentiment}
 
 
 # ✅ 차단 요청 API
@@ -73,3 +85,42 @@ def get_blocked_authors():
     except Exception as e:
         print(f"[❌ blocked_authors] 오류 발생: {str(e)}")
         return JSONResponse(content=[])
+
+
+@app.post("/check_comment")
+async def check_comment(request: Comment):
+    try:
+        def check_profanity(content: str) -> str:
+            response = client.chat.completions.create(
+                model="gpt-4-turbo",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "당신은 한국어 비속어/욕설/은어/변형 표현을 판별하는 AI입니다. "
+                            "오직 inappropriate 또는 normal 중 하나로만 답해주세요. "
+                            "다른 말은 절대 하지 마세요."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": f"\"{content}\" 이 문장에 비속어가 포함되어 있나요?"
+                    }
+                ],
+                max_tokens=20,
+                temperature=0
+            )
+            return response.choices[0].message.content.strip().lower()
+
+        # 각각 판별
+        text_result = check_profanity(request.text)
+        author_result = check_profanity(request.author)
+
+        # 하나라도 inappropriate이면 전체 결과를 inappropriate으로
+        final_result = "inappropriate" if "inappropriate" in [text_result, author_result] else "normal"
+
+        return {"sentiment": final_result}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

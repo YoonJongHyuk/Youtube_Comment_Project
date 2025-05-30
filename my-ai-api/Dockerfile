@@ -8,8 +8,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY ai_server.py .
-COPY svc_model.joblib .
-COPY vectorizer.joblib .
+# COPY svc_model.joblib .
+# COPY vectorizer.joblib .
 
 # 서버 실행 명령
 CMD ["uvicorn", "ai_server:app", "--host", "0.0.0.0", "--port", "8080"]
