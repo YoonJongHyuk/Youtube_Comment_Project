@@ -1,12 +1,12 @@
 // Cloud Run API 주소
-const API_BASE = "https://comment-api-514551150962.asia-northeast3.run.app";
+const API_BASE = "https://my-ai-api-514551150962.asia-northeast3.run.app";
 const BLOCKED_AUTHORS_KEY = 'blocked_authors';
 
 // 기본 필터 키워드
-const sentimentConfig = {
-  useAI: true,
-  inappropriateWords: ['욕설', '비방', '혐오', '차별', '성적', '폭력', '스팸', '광고', '도박', '사기']
-};
+// const sentimentConfig = {
+//   useAI: true,
+//   inappropriateWords: ['욕설', '비방', '혐오', '차별', '성적', '폭력', '스팸', '광고', '도박', '사기']
+// };
 
 // ✅ 서버에서 차단된 작성자 목록 가져오기
 async function getBlockedAuthorsFromServer() {
@@ -78,48 +78,81 @@ function hideBlockedComments(blockedAuthors) {
 
 // 기본 감정 분석
 function analyzeSentimentBasic(text) {
-  return sentimentConfig.inappropriateWords.some(word => text.includes(word))
-    ? 'inappropriate' : 'normal';
+  const badWords = ['욕설', '비방', '혐오', '차별', '성적', '폭력', '스팸', '광고', '도박', '사기'];
+  return badWords.some(word => text.includes(word)) ? 'inappropriate' : 'normal';
 }
 
-// AI 감정 분석
-async function analyzeSentimentAI(comment) {
+
+
+
+// // AI 감정 분석
+// async function analyzeSentimentAI(comment) {
+//   const { text, author } = comment;
+//   if (!author || typeof author !== "string" || author.trim() === "") {
+//     console.warn("❌ 유효하지 않은 author. 기본 분석으로 대체:", author);
+//     return analyzeSentimentBasic(text);
+//   }
+
+//   try {
+//     const response = await fetch(`${API_BASE}/analyze`, {
+//       method: 'POST',
+//       headers: { 'Content-Type': 'application/json' },
+//       body: JSON.stringify({ text, author })
+//     });
+
+//     if (!response.ok) {
+//       console.warn(`[🚫 analyze] 상태코드: ${response.status}`);
+//       return analyzeSentimentBasic(text);
+//     }
+
+//     const result = await response.json();
+//     return result.sentiment;
+//   } catch (error) {
+//     console.error("[❌ analyze] 요청 실패:", error);
+//     return analyzeSentimentBasic(text);
+//   }
+// }
+
+// // 분석 선택자
+// async function analyzeSentiment(comment) {
+//   return sentimentConfig.useAI
+//     ? await analyzeSentimentAI(comment)
+//     : analyzeSentimentBasic(comment.text);
+// }
+
+// GPT 기반 감정 분석
+async function analyzeSentiment(comment) {
   const { text, author } = comment;
   if (!author || typeof author !== "string" || author.trim() === "") {
     console.warn("❌ 유효하지 않은 author. 기본 분석으로 대체:", author);
+    //console.warn("text:", text);
+    //console.warn("author:", text);
     return analyzeSentimentBasic(text);
   }
 
   try {
-    const response = await fetch(`${API_BASE}/analyze`, {
+    const response = await fetch(`${API_BASE}/check_comment`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, author })
     });
 
     if (!response.ok) {
-      console.warn(`[🚫 analyze] 상태코드: ${response.status}`);
+      console.warn(`[🚫 check_comment] 상태코드: ${response.status}`);
       return analyzeSentimentBasic(text);
     }
 
     const result = await response.json();
     return result.sentiment;
   } catch (error) {
-    console.error("[❌ analyze] 요청 실패:", error);
+    console.error("[❌ check_comment] 요청 실패:", error);
     return analyzeSentimentBasic(text);
   }
 }
 
-// 분석 선택자
-async function analyzeSentiment(comment) {
-  return sentimentConfig.useAI
-    ? await analyzeSentimentAI(comment)
-    : analyzeSentimentBasic(comment.text);
-}
-
 // YouTube API로 댓글 수집
 async function collectComments(videoId) {
-  const apiKey = 'AIzaSyC_iw9IS7qmhChzKTqcz37JcmCaAO1Rw2o';
+  const apiKey = 'AIzaSyBbwdNb4lLNZG0WaT_ORv_S_gTmQu0x6jg';
   let allComments = [];
   let nextPageToken = null;
 

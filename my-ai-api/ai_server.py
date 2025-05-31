@@ -6,6 +6,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import os
 import joblib
+from fastapi import Query
 
 load_dotenv()
 
@@ -78,6 +79,8 @@ def unblock_author(data: BlockRequest):
 
 
 # ✅ 차단 목록 조회 API
+
+
 @app.get("/blocked_authors")
 def get_blocked_authors():
     try:
@@ -85,6 +88,7 @@ def get_blocked_authors():
     except Exception as e:
         print(f"[❌ blocked_authors] 오류 발생: {str(e)}")
         return JSONResponse(content=[])
+
 
 
 @app.post("/check_comment")
@@ -123,4 +127,9 @@ async def check_comment(request: Comment):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("ai_server:app", host="0.0.0.0", port=8080)
 

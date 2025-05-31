@@ -7,7 +7,7 @@ const blockedList = document.getElementById('blockedList');
 const loadingDiv = document.getElementById('loading');
 const commendDiv = document.getElementById('commend');
 
-const API_BASE = "https://comment-api-514551150962.asia-northeast3.run.app";
+const API_BASE = "https://my-ai-api-514551150962.asia-northeast3.run.app";
 
 // ✅ 서버에서 차단된 작성자 목록 조회
 async function getBlockedAuthorsFromServer() {
